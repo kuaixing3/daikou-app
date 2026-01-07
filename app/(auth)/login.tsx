@@ -8,7 +8,7 @@ import {
   Text,
 } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { useRouter, Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { auth } from '../../config/firebase';
 import { ThemedView } from '../../components/themed-view';
 import { ThemedText } from '../../components/themed-text';
@@ -72,13 +72,14 @@ export default function LoginScreen() {
         </Text>
       </Pressable>
 
-      <Link href="/(auth)/signup" asChild>
-        <Pressable style={styles.signUpLink}>
-          <ThemedText style={styles.signUpText}>
-            Don't have an account? Sign Up
-          </ThemedText>
-        </Pressable>
-      </Link>
+      <Pressable
+        style={styles.signUpLink}
+        onPress={() => router.push('/(auth)/signup')}
+        accessibilityRole="link">
+        <ThemedText style={styles.signUpText}>
+          Don't have an account? Sign Up
+        </ThemedText>
+      </Pressable>
     </ThemedView>
   );
 }

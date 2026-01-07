@@ -1,0 +1,99 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userRole() {
+      return userDoc().data.role;
+    }
+
+    function isDriver() {
+      return isSignedIn() && userDoc().exists() && userRole() == 'driver';
+    }
+
+    function isNullOrMissing(data, key) {
+      return !(data.keys().hasAny([key])) || data[key] == null;
+    }
+
+    match /users/{userId} {
+      allow read: if isSelf(userId);
+
+      allow create: if isSelf(userId)
+        && request.resource.data.keys().hasOnly(['role', 'isOnline', 'createdAt', 'updatedAt'])
+        && (request.resource.data.role == 'user' || request.resource.data.role == 'driver')
+        && (
+          request.resource.data.role == 'driver'
+            ? request.resource.data.isOnline is bool
+            : isNullOrMissing(request.resource.data, 'isOnline')
+        )
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if isSelf(userId)
+        && request.resource.data.keys().hasOnly(['role', 'isOnline', 'createdAt', 'updatedAt'])
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (
+          resource.data.role == 'driver'
+            ? request.resource.data.isOnline is bool
+            : isNullOrMissing(request.resource.data, 'isOnline')
+        )
+        && (
+          request.resource.data.updatedAt == resource.data.updatedAt
+          || request.resource.data.updatedAt == request.time
+        );
+
+      allow delete: if false;
+    }
+
+    match /rideRequests/{requestId} {
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly([
+          'userId',
+          'status',
+          'pickupLocation',
+          'createdAt',
+          'driverId',
+          'updatedAt'
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'searching'
+        && request.resource.data.pickupLocation is map
+        && request.resource.data.pickupLocation.latitude is number
+        && request.resource.data.pickupLocation.longitude is number
+        && isNullOrMissing(request.resource.data, 'driverId')
+        && request.resource.data.createdAt == request.time;
+
+      allow read: if isSignedIn()
+        && (
+          resource.data.userId == request.auth.uid
+          || resource.data.driverId == request.auth.uid
+          || (isDriver()
+            && resource.data.status == 'searching'
+            && isNullOrMissing(resource.data, 'driverId'))
+        );
+
+      allow update: if isSignedIn()
+        && isDriver()
+        && resource.data.status == 'searching'
+        && isNullOrMissing(resource.data, 'driverId')
+        && request.resource.data.status == 'matched'
+        && request.resource.data.driverId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.pickupLocation == resource.data.pickupLocation
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if false;
+    }
+  }
+}

@@ -10,8 +10,10 @@ export const Marker = (props: any): React.ReactElement | null => {
 // This is a dummy MapView component for web.
 // It renders a placeholder instead of a real map.
 const DummyMapView = (props: any): React.ReactElement => {
+  const containerStyle = StyleSheet.flatten([props.style, styles.container]);
+
   return (
-    <View style={[props.style, styles.container]}>
+    <View style={containerStyle}>
       <Text style={styles.text}>Map is not available on web.</Text>
     </View>
   );

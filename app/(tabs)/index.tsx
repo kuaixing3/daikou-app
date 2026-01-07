@@ -1,11 +1,8 @@
 import React from 'react';
-import { View, ActivityIndicator, StyleSheet, Pressable } from 'react-native';
+import { ActivityIndicator, StyleSheet } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { ThemedText } from '../../components/themed-text';
 import { ThemedView } from '../../components/themed-view';
-import { signOut } from 'firebase/auth';
-import { auth } from '../../config/firebase';
-import { useRouter } from 'expo-router';
 
 // Import the actual screens
 import UserScreen from './user';
@@ -13,19 +10,10 @@ import DriverScreen from './driver';
 
 export default function TabIndexScreen() {
   const { userProfile, isLoading, user } = useAuth();
-  const router = useRouter();
 
-  const handleSignOut = async () => {
-    try {
-      await signOut(auth);
-      router.replace('/(auth)/signup'); // Redirect to signup/login after sign out
-    } catch (error) {
-      console.error('Error signing out:', error);
-      Alert.alert('Sign Out Failed', 'Could not sign out. Please try again.');
-    }
-  };
-
-  if (isLoading) {
+  // Show loading indicator while auth state is being resolved,
+  // or if the user is authenticated but the profile is still being fetched.
+  if (isLoading || (user && !userProfile)) {
     return (
       <ThemedView style={styles.loadingContainer}>
         <ActivityIndicator size="large" />
@@ -34,7 +22,6 @@ export default function TabIndexScreen() {
     );
   }
 
-  // If user is null, it means AuthProvider has finished loading and found no authenticated user.
   // This case should ideally be handled by _layout.tsx redirecting to /signup.
   if (!user) {
     return (
@@ -44,19 +31,16 @@ export default function TabIndexScreen() {
     );
   }
 
-  // If userProfile is null even if user is authenticated, it means
-  // the profile data does not exist in Firestore for some reason.
-  // This could happen if a user is created via Firebase Auth but their profile
-  // is not yet written to Firestore.
+  // After loading, if there's a user but still no profile, it's a genuine issue.
+  // This might happen if the Firestore document creation failed or is delayed.
+  // We show a generic error and allow signing out.
   if (!userProfile) {
     return (
       <ThemedView style={styles.loadingContainer}>
         <ThemedText>
-          Your user profile could not be loaded. Please ensure your account is set up correctly.
+          Could not load user profile. Please try signing out and back in.
         </ThemedText>
-        <Pressable style={styles.signOutButton} onPress={handleSignOut}>
-          <ThemedText style={styles.signOutButtonText}>Sign Out</ThemedText>
-        </Pressable>
+        {/* A sign-out button could be placed here as a fallback, handled by a separate component */}
       </ThemedView>
     );
   }
@@ -70,9 +54,6 @@ export default function TabIndexScreen() {
     return (
       <ThemedView style={styles.loadingContainer}>
         <ThemedText>Unknown user role.</ThemedText>
-        <Pressable style={styles.signOutButton} onPress={handleSignOut}>
-          <ThemedText style={styles.signOutButtonText}>Sign Out</ThemedText>
-        </Pressable>
       </ThemedView>
     );
   }
@@ -83,22 +64,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  signOutButton: {
-    marginTop: 20,
-    backgroundColor: '#FF3B30', // Red color for sign out
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-  },
-  signOutButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
   },
 });

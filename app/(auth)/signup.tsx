@@ -23,26 +23,53 @@ export default function SignUpScreen() {
   const router = useRouter();
 
   const handleSignUp = async () => {
-    if (email === '' || password === '') {
+    const finalEmail = email.trim(); // Trim whitespace from email
+
+    if (finalEmail === '' || password === '') {
       Alert.alert('Sign Up Error', 'Email and password cannot be empty.');
       return;
     }
+    
+    // Simple regex for email validation
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(finalEmail)) {
+        Alert.alert('Sign Up Error', 'Please enter a valid email address.');
+        return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Sign Up Error', 'Password must be at least 6 characters long.');
+      return;
+    }
+
+    console.log('Attempting to sign up with:', { email: finalEmail, password, role }); // Debugging line
+    
     setIsLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(
         auth,
-        email,
+        finalEmail,
         password
       );
       const user = userCredential.user;
 
       const userDocRef = doc(db, 'users', user.uid);
-      await setDoc(userDocRef, {
+      const userDocData: {
+        role: UserRole;
+        isOnline?: boolean;
+        createdAt: ReturnType<typeof serverTimestamp>;
+        updatedAt: ReturnType<typeof serverTimestamp>;
+      } = {
         role,
-        isOnline: role === 'driver' ? false : undefined, // Add isOnline only for drivers
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      if (role === 'driver') {
+        userDocData.isOnline = false;
+      }
+
+      await setDoc(userDocRef, userDocData);
 
       // Navigate to the main app screen after sign-up.
       // The root layout will handle redirecting to the correct screen.

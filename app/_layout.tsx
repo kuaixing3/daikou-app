@@ -17,20 +17,28 @@ function RootLayoutNav() {
   const router = useRouter();
 
   useEffect(() => {
+    console.log('[Layout Effect] Running...', { isLoading, user: !!user, segments });
+
     if (isLoading) {
+      console.log('[Layout Effect] Still loading, returning.');
       return; // Wait until authentication state is loaded
     }
 
     const inAuthGroup = segments[0] === '(auth)';
+    console.log('[Layout Effect] In auth group?', inAuthGroup);
 
     if (!user && !inAuthGroup) {
-      // Redirect to the sign-up page if the user is not logged in
+      // Redirect to the auth group's root if the user is not logged in
       // and not already in the auth flow.
-      router.replace('/(auth)/signup');
+      console.log('[Layout Effect] User not found and not in auth group, redirecting to /auth');
+      router.replace('/(auth)');
     } else if (user && inAuthGroup) {
       // Redirect to the main app if the user is logged in
       // and currently in the auth flow.
+      console.log('[Layout Effect] User found and in auth group, redirecting to /tabs');
       router.replace('/(tabs)');
+    } else {
+      console.log('[Layout Effect] No redirect condition met.');
     }
     
     // After resolution, hide the splash screen

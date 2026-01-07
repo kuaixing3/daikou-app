@@ -1,18 +1,30 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Button, ActivityIndicator, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  Button,
+  ActivityIndicator,
+  Alert,
+  Pressable,
+} from 'react-native';
 import { ThemedText } from '../../components/themed-text';
 import { ThemedView } from '../../components/themed-view';
 import { useAuth } from '../../contexts/AuthContext';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { db, auth } from '../../config/firebase';
 import type { Location, RideRequestStatus } from '../../types';
-import MapView, { Marker } from '../../components/ConditionalMapView'; // Import MapView and Marker
+import MapView, { Marker } from '../../components/ConditionalMapView';
+import { useRouter } from 'expo-router';
+import { signOut } from 'firebase/auth';
 
 export default function UserScreen() {
-  const { user } = useAuth();
-  const [currentStatus, setCurrentStatus] = useState<RideRequestStatus | 'idle'>('idle');
+  const { user, userProfile, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const isUser = userProfile?.role === 'user';
+  const [currentStatus, setCurrentStatus] =
+    useState<RideRequestStatus | 'idle'>('idle');
   const [isLoading, setIsLoading] = useState(false);
-  const [pickupLocation, setPickupLocation] = useState<Location | null>(null); // State to hold pickup location
+  const [pickupLocation, setPickupLocation] = useState<Location | null>(null);
 
   const initialRegion = {
     latitude: 34.052235, // Example: Los Angeles
@@ -28,15 +40,13 @@ export default function UserScreen() {
     }
 
     setIsLoading(true);
-    setCurrentStatus('searching'); // Immediately update status for UI
+    setCurrentStatus('searching');
     try {
-      // For MVP, we'll use a dummy location.
-      // In a real app, this would come from GPS.
-      const selectedPickupLocation: Location = { // Use a local variable for clarity
-        latitude: initialRegion.latitude + (Math.random() * 0.01 - 0.005), // Slightly vary for testing
+      const selectedPickupLocation: Location = {
+        latitude: initialRegion.latitude + (Math.random() * 0.01 - 0.005),
         longitude: initialRegion.longitude + (Math.random() * 0.01 - 0.005),
       };
-      setPickupLocation(selectedPickupLocation); // Set the pickup location for the marker
+      setPickupLocation(selectedPickupLocation);
 
       await addDoc(collection(db, 'rideRequests'), {
         userId: user.uid,
@@ -48,23 +58,55 @@ export default function UserScreen() {
     } catch (error) {
       console.error('Error requesting ride:', error);
       Alert.alert('Error', 'Failed to request ride. Please try again.');
-      setCurrentStatus('idle'); // Revert status on error
-      setPickupLocation(null); // Clear pickup location on error
+      setCurrentStatus('idle');
+      setPickupLocation(null);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+      // The AuthProvider will handle redirecting to the auth flow.
+    } catch (error) {
+      console.error('Error signing out: ', error);
+      Alert.alert('Error', 'Failed to sign out.');
+    }
+  };
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (userProfile && !isUser) {
+      router.replace('/(tabs)');
+    }
+  }, [authLoading, userProfile, isUser, router]);
+
+  if (authLoading || !userProfile || !isUser) {
+    return (
+      <ThemedView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" />
+        <ThemedText>Loading profile...</ThemedText>
+      </ThemedView>
+    );
+  }
+
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.title}>
-        User Dashboard
-      </ThemedText>
+      <View style={styles.header}>
+        <ThemedText type="title">User Dashboard</ThemedText>
+        <Pressable onPress={handleSignOut}>
+          <ThemedText style={styles.signOutText}>Sign Out</ThemedText>
+        </Pressable>
+      </View>
 
       <MapView
-        style={styles.mapView} // Use a dedicated style for MapView
+        style={styles.mapView}
         initialRegion={initialRegion}
-        showsUserLocation={true} // Requires location permissions (handled in AndroidManifest/Info.plist)
+        showsUserLocation={true}
       >
         {pickupLocation && (
           <Marker
@@ -75,31 +117,31 @@ export default function UserScreen() {
         )}
       </MapView>
 
-      <ThemedText style={styles.statusText}>
-        Current Status: {currentStatus === 'idle' ? 'Ready' : currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}
-      </ThemedText>
+      <View style={styles.bottomContainer}>
+        <ThemedText style={styles.statusText}>
+          Current Status:{' '}
+          {currentStatus === 'idle'
+            ? 'Ready'
+            : currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}
+        </ThemedText>
 
-      {currentStatus === 'idle' && (
-        <Button
-          title={isLoading ? 'Requesting...' : 'Request Ride'}
-          onPress={handleRequestRide}
-          disabled={isLoading}
-        />
-      )}
+        {currentStatus === 'idle' && (
+          <Button
+            title={isLoading ? 'Requesting...' : 'Request Ride'}
+            onPress={handleRequestRide}
+            disabled={isLoading}
+          />
+        )}
 
-      {currentStatus === 'searching' && (
-        <ThemedView style={styles.searchingContainer}>
-          <ActivityIndicator size="large" />
-          <ThemedText style={styles.searchingText}>Searching for a driver...</ThemedText>
-        </ThemedView>
-      )}
-
-      {/* Add UI for 'matched' state later */}
-      {/* {currentStatus === 'matched' && (
-        <ThemedView style={styles.matchedContainer}>
-          <ThemedText style={styles.matchedText}>Driver found! Details here.</ThemedText>
-        </ThemedView>
-      )} */}
+        {currentStatus === 'searching' && (
+          <ThemedView style={styles.searchingContainer}>
+            <ActivityIndicator size="large" />
+            <ThemedText style={styles.searchingText}>
+              Searching for a driver...
+            </ThemedText>
+          </ThemedView>
+        )}
+      </View>
     </ThemedView>
   );
 }
@@ -107,20 +149,33 @@ export default function UserScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
     alignItems: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  title: {
-    marginBottom: 20,
-  },
-  mapView: { // Updated style for MapView
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     width: '100%',
-    height: 300,
-    marginBottom: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#ddd',
+    padding: 20,
+    paddingTop: 50, // Adjust for status bar
+  },
+  signOutText: {
+    color: '#007AFF',
+    fontSize: 16,
+  },
+  mapView: {
+    width: '100%',
+    flex: 1,
+  },
+  bottomContainer: {
+    padding: 20,
+    width: '100%',
+    alignItems: 'center',
   },
   statusText: {
     fontSize: 18,
@@ -135,6 +190,4 @@ const styles = StyleSheet.create({
   searchingText: {
     fontSize: 16,
   },
-  // matchedContainer: { ... },
-  // matchedText: { ... },
 });
